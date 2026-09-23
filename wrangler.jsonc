@@ -1,0 +1,26 @@
+{
+  "$schema": "./backend/node_modules/wrangler/config-schema.json",
+  "name": "graceedge",
+  "main": "backend/worker/index.js",
+  "compatibility_date": "2026-06-01",
+  "assets": {
+    "directory": "./frontend/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "r2_buckets": [
+    {
+      "binding": "AUDIO",
+      "bucket_name": "graceedge-audio",
+    },
+  ],
+  "vars": {
+    "SUPABASE_URL": "https://pyiitojnnbvhzfksbtfi.supabase.co",
+    "SUPABASE_KEY": "sb_publishable_Bdc8Mv5lzh_6rDccKVZ93g_pXtV2Wyv",
+    // Set this to your deployed Node service when Cloudflare serves the frontend.
+    // Example: "https://graceedge-audio.up.railway.app"
+    // "TELEGRAM_API_ORIGIN": "https://your-node-service.example",
+  },
+  "observability": { "enabled": true },
+}

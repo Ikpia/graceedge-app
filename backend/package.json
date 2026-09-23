@@ -1,0 +1,35 @@
+{
+  "name": "@graceedge/backend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "telegram:login": "node server/login.js",
+    "telegram:backfill": "node server/backfill.js",
+    "worker:dev": "wrangler dev --config ../wrangler.jsonc",
+    "worker:deploy": "wrangler deploy --config ../wrangler.jsonc",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1132.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "big-integer": "^1.6.52",
+    "telegram": "^2.26.22"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.5.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.44.1",
+    "wrangler": "^4.123.0"
+  }
+}
