@@ -17,6 +17,11 @@ export function createHttpServer(config, cache, telegram, r2Store) {
   return http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
+      const isApi = url.pathname.startsWith("/api/");
+
+      if (isApi && request.method === "OPTIONS") {
+        return sendCorsPreflight(response);
+      }
 
       if (url.pathname === "/health") {
         return sendJson(response, { ok: true, tracks: cache.size() });
@@ -181,6 +186,7 @@ function audioHeaders({
   partial = false,
 }) {
   const headers = {
+    ...corsHeaders(),
     "content-type": mimeType || "audio/mpeg",
     "content-length": size,
     "accept-ranges": "bytes",
@@ -195,6 +201,7 @@ function audioHeaders({
 
 function sendRangeNotSatisfiable(response, total) {
   response.writeHead(416, {
+    ...corsHeaders(),
     "content-range": `bytes */${total}`,
     "accept-ranges": "bytes",
   });
@@ -280,6 +287,7 @@ function safeDistPath(pathname) {
 
 function sendJson(response, body, status = 200, extraHeaders = {}) {
   response.writeHead(status, {
+    ...corsHeaders(),
     "content-type": "application/json",
     ...extraHeaders,
   });
@@ -287,8 +295,26 @@ function sendJson(response, body, status = 200, extraHeaders = {}) {
 }
 
 function sendText(response, text, status = 200) {
-  response.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
+  response.writeHead(status, {
+    ...corsHeaders(),
+    "content-type": "text/plain; charset=utf-8",
+  });
   response.end(text);
+}
+
+function sendCorsPreflight(response) {
+  response.writeHead(204, corsHeaders());
+  response.end();
+}
+
+function corsHeaders() {
+  return {
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET, HEAD, OPTIONS",
+    "access-control-allow-headers": "accept, authorization, content-type, range",
+    "access-control-expose-headers":
+      "accept-ranges, content-length, content-range, content-type, x-audio-cache",
+  };
 }
 
 function quoteFileName(name) {
