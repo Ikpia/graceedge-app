@@ -12,6 +12,28 @@ export function createTelegramService(config, store, cache, audioCache) {
   });
 
   let channelEntity = null;
+  let liveHandler = null;
+  let liveEvent = null;
+  const status = {
+    startedAt: new Date().toISOString(),
+    connectedAt: null,
+    listenerAttachedAt: null,
+    lastLiveMessageAt: null,
+    lastLiveTrackId: null,
+    lastIndexedAt: null,
+    lastIndexedMessageId: null,
+    lastCatchUpAt: null,
+    lastCatchUpSeen: 0,
+    lastCatchUpSaved: 0,
+    lastCatchUpErrorAt: null,
+    lastCatchUpError: null,
+    consecutiveCatchUpFailures: 0,
+    reconnecting: false,
+    reconnectCount: 0,
+    lastReconnectAt: null,
+    lastReconnectErrorAt: null,
+    lastReconnectError: null,
+  };
 
   async function connect() {
     await client.connect();
@@ -21,6 +43,9 @@ export function createTelegramService(config, store, cache, audioCache) {
       );
     }
     channelEntity = await client.getEntity(config.telegram.channel);
+    status.connectedAt = new Date().toISOString();
+    status.lastReconnectError = null;
+    status.lastReconnectErrorAt = null;
     return channelEntity;
   }
 
@@ -29,6 +54,8 @@ export function createTelegramService(config, store, cache, audioCache) {
     if (!track) return null;
     const saved = await store.upsertTrack(track);
     cache.upsert(saved);
+    status.lastIndexedAt = new Date().toISOString();
+    status.lastIndexedMessageId = saved.messageId;
     return saved;
   }
 
@@ -55,20 +82,96 @@ export function createTelegramService(config, store, cache, audioCache) {
 
   async function catchUp() {
     const minId = Math.max(cache.latestMessageId(), await store.latestMessageId());
-    return backfill({ minId });
+    try {
+      const result = await backfill({ minId });
+      status.lastCatchUpAt = new Date().toISOString();
+      status.lastCatchUpSeen = result.seen;
+      status.lastCatchUpSaved = result.saved;
+      status.lastCatchUpError = null;
+      status.lastCatchUpErrorAt = null;
+      status.consecutiveCatchUpFailures = 0;
+      return result;
+    } catch (error) {
+      status.lastCatchUpErrorAt = new Date().toISOString();
+      status.lastCatchUpError = errorMessage(error);
+      status.consecutiveCatchUpFailures += 1;
+      throw error;
+    }
   }
 
   function listen() {
-    client.addEventHandler(
-      async (event) => {
-        try {
-          await indexMessage(event.message);
-        } catch (error) {
-          console.error("[telegram] could not index live message", error);
+    if (liveHandler && liveEvent) return;
+
+    liveHandler = async (event) => {
+      status.lastLiveMessageAt = new Date().toISOString();
+      try {
+        const saved = await indexMessage(event.message);
+        if (saved) {
+          status.lastLiveTrackId = saved.messageId;
+          console.log(`[telegram] indexed live audio ${saved.messageId}`);
         }
-      },
-      new NewMessage({ chats: [config.telegram.channel] })
-    );
+      } catch (error) {
+        console.error("[telegram] could not index live message", error);
+      }
+    };
+    liveEvent = new NewMessage({ chats: [config.telegram.channel] });
+    client.addEventHandler(liveHandler, liveEvent);
+    status.listenerAttachedAt = new Date().toISOString();
+  }
+
+  function unlisten() {
+    if (!liveHandler || !liveEvent) return;
+    client.removeEventHandler(liveHandler, liveEvent);
+    liveHandler = null;
+    liveEvent = null;
+    status.listenerAttachedAt = null;
+  }
+
+  async function reconnect() {
+    if (status.reconnecting) return false;
+    status.reconnecting = true;
+    status.lastReconnectAt = new Date().toISOString();
+    status.reconnectCount += 1;
+
+    try {
+      unlisten();
+      try {
+        await client.disconnect();
+      } catch {}
+      await connect();
+      listen();
+      status.lastReconnectError = null;
+      status.lastReconnectErrorAt = null;
+      return true;
+    } catch (error) {
+      status.lastReconnectErrorAt = new Date().toISOString();
+      status.lastReconnectError = errorMessage(error);
+      throw error;
+    } finally {
+      status.reconnecting = false;
+    }
+  }
+
+  async function ensureConnected() {
+    if (!client.connected) {
+      console.warn("[telegram] client is disconnected; reconnecting");
+      return reconnect();
+    }
+    if (!liveHandler || !liveEvent) {
+      console.warn("[telegram] live listener is detached; reattaching");
+      listen();
+      return true;
+    }
+    return false;
+  }
+
+  function health() {
+    return {
+      connected: Boolean(client.connected),
+      listenerAttached: Boolean(liveHandler && liveEvent),
+      latestMessageId: cache.latestMessageId(),
+      ...status,
+    };
   }
 
   async function getAudioBuffer(messageId) {
@@ -190,7 +293,10 @@ export function createTelegramService(config, store, cache, audioCache) {
     connect,
     backfill,
     catchUp,
+    ensureConnected,
+    reconnect,
     listen,
+    health,
     getAudioBuffer,
     getAudioRange,
     streamAudioRange,
@@ -250,6 +356,10 @@ function toNumber(value) {
   if (typeof value.toNumber === "function") return value.toNumber();
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+function errorMessage(error) {
+  return error?.message || String(error || "Unknown error");
 }
 
 export { Api };

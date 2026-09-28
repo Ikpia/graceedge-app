@@ -24,7 +24,20 @@ export function createHttpServer(config, cache, telegram, r2Store) {
       }
 
       if (url.pathname === "/health") {
-        return sendJson(response, { ok: true, tracks: cache.size() });
+        const latest = cache.list()[0] || null;
+        return sendJson(response, {
+          ok: true,
+          tracks: cache.size(),
+          latestMessageId: cache.latestMessageId(),
+          latestTrack: latest
+            ? {
+                messageId: latest.messageId,
+                title: latest.title,
+                postedAt: latest.postedAt,
+              }
+            : null,
+          telegram: telegram.health(),
+        });
       }
 
       if (url.pathname === "/api/tracks") {

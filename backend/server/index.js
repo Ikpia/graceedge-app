@@ -33,6 +33,7 @@ async function main() {
 
   telegram.listen();
   console.log("[startup] live Telegram listener is running");
+  startCatchUpLoop(telegram, config.telegram.catchUpIntervalMs);
   console.log("[startup] R2 audio cache is enabled");
 
   const server = createHttpServer(config, cache, telegram, r2Store);
@@ -44,6 +45,39 @@ async function main() {
 function shouldBackfill(value, cacheSize) {
   if (value === "auto") return cacheSize === 0;
   return /^(1|true|yes|on)$/i.test(value);
+}
+
+function startCatchUpLoop(telegram, intervalMs) {
+  if (!intervalMs || intervalMs < 30000) {
+    console.log("[startup] periodic Telegram catch-up is disabled");
+    return;
+  }
+
+  let running = false;
+  setInterval(async () => {
+    if (running) return;
+    running = true;
+    try {
+      await telegram.ensureConnected();
+      const result = await telegram.catchUp();
+      if (result.seen || result.saved) {
+        console.log(`[telegram] periodic catch-up scanned ${result.seen}, saved ${result.saved}`);
+      }
+    } catch (error) {
+      console.error("[telegram] periodic catch-up failed", error);
+      try {
+        console.warn("[telegram] reconnecting after catch-up failure");
+        await telegram.reconnect();
+        console.log("[telegram] reconnected and reattached live listener");
+      } catch (reconnectError) {
+        console.error("[telegram] reconnect failed", reconnectError);
+      }
+    } finally {
+      running = false;
+    }
+  }, intervalMs).unref();
+
+  console.log(`[startup] periodic Telegram catch-up every ${Math.round(intervalMs / 1000)}s`);
 }
 
 main().catch((error) => {

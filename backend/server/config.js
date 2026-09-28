@@ -21,6 +21,7 @@ export function loadConfig() {
       backfillOnStart: env("TELEGRAM_BACKFILL_ON_START", "auto"),
       backfillBatchPauseMs: envNumber("TELEGRAM_BACKFILL_BATCH_PAUSE_MS", 850),
       backfillBatchSize: envNumber("TELEGRAM_BACKFILL_BATCH_SIZE", 100),
+      catchUpIntervalMs: envNumber("TELEGRAM_CATCHUP_INTERVAL_MS", 3600000),
     },
     audio: {
       memoryCacheMb: envNumber("AUDIO_MEMORY_CACHE_MB", 256),
